@@ -45,6 +45,9 @@ hidden_imports = [
 # 데이터 파일 (리소스 등)
 datas = []
 
+# src 디렉토리의 Python 모듈들 포함
+datas.append((str(src_path), 'src'))
+
 # resources 디렉토리가 있으면 포함
 resources_path = project_root / 'resources'
 if resources_path.exists():
@@ -56,7 +59,7 @@ binaries = []
 # 분석 단계
 a = Analysis(
     [str(src_path / 'main.py')],
-    pathex=[str(project_root)],
+    pathex=[str(project_root), str(src_path)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hidden_imports,
