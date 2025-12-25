@@ -5,8 +5,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 from typing import Optional, Callable
 from pathlib import Path
 
-from ..utils.logger import get_logger
-from .config import ModelConfig, config
+from utils.logger import get_logger
+from core.config import ModelConfig, config
 
 logger = get_logger(__name__)
 

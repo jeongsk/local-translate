@@ -4,7 +4,7 @@ from PySide6.QtCore import QSettings, QByteArray
 from typing import Optional
 from enum import Enum
 
-from .config import LanguageCode
+from core.config import LanguageCode
 
 
 class Theme(str, Enum):

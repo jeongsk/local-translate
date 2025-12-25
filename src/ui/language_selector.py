@@ -4,8 +4,8 @@ from typing import Optional
 from PySide6.QtWidgets import QComboBox, QWidget
 from PySide6.QtCore import Signal
 
-from ..core.config import SUPPORTED_LANGUAGES, LanguageCode, Language
-from ..utils.logger import get_logger
+from core.config import SUPPORTED_LANGUAGES, LanguageCode, Language
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
