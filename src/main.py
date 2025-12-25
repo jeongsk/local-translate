@@ -1,18 +1,37 @@
 """Application entry point."""
 
 import sys
+import os
+from pathlib import Path
+
+# PyInstaller 호환성: 실행 파일 경로 설정
+if getattr(sys, 'frozen', False):
+    # PyInstaller로 빌드된 경우
+    _base_path = Path(sys._MEIPASS)
+    # src 디렉토리를 sys.path에 추가
+    _src_path = _base_path / 'src'
+    if _src_path.exists() and str(_src_path) not in sys.path:
+        sys.path.insert(0, str(_src_path))
+    if str(_base_path) not in sys.path:
+        sys.path.insert(0, str(_base_path))
+else:
+    # 개발 환경에서 실행되는 경우
+    _src_path = Path(__file__).parent
+    if str(_src_path) not in sys.path:
+        sys.path.insert(0, str(_src_path))
+
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import QThread, Signal, QObject
 
-from .utils.logger import setup_logger, get_logger
-from .ui.splash_screen import SplashScreen
-from .ui.main_window import MainWindow
-from .ui.styles import ThemeManager
-from .core.model_manager import ModelManager
-from .core.language_detector import LanguageDetector
-from .core.translator import TranslationService
-from .core.preferences import UserPreferences
-from .core.config import config
+from utils.logger import setup_logger, get_logger
+from ui.splash_screen import SplashScreen
+from ui.main_window import MainWindow
+from ui.styles import ThemeManager
+from core.model_manager import ModelManager
+from core.language_detector import LanguageDetector
+from core.translator import TranslationService
+from core.preferences import UserPreferences
+from core.config import config
 
 # Setup logging
 setup_logger(level="INFO")
