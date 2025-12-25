@@ -1,0 +1,154 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0, v0.1.0 등의 태그 푸시 시 트리거
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '릴리즈 버전 (예: v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e ".[dev]"
+          uv pip install --system pyinstaller
+
+      - name: Build application
+        run: |
+          pyinstaller --clean --noconfirm LocalTranslate.spec
+
+      - name: Verify build
+        run: |
+          if [ ! -d "dist/LocalTranslate.app" ]; then
+            echo "빌드 실패: LocalTranslate.app을 찾을 수 없습니다."
+            exit 1
+          fi
+          echo "빌드 성공!"
+          ls -la dist/
+          du -sh dist/LocalTranslate.app
+
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          zip -r -y LocalTranslate-macOS.zip LocalTranslate.app
+          ls -la
+
+      - name: Create DMG (optional)
+        run: |
+          hdiutil create -volname "LocalTranslate" \
+            -srcfolder dist/LocalTranslate.app \
+            -ov -format UDZO \
+            dist/LocalTranslate-macOS.dmg
+          ls -la dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalTranslate-macOS
+          path: |
+            dist/LocalTranslate-macOS.zip
+            dist/LocalTranslate-macOS.dmg
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LocalTranslate-macOS
+          path: dist/
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "릴리즈 버전: $VERSION"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## 📦 LocalTranslate ${{ steps.version.outputs.version }}
+
+          ### 다운로드
+          - **macOS**: `LocalTranslate-macOS.dmg` 또는 `LocalTranslate-macOS.zip`
+
+          ### 설치 방법
+
+          #### DMG 파일 사용 (권장)
+          1. `LocalTranslate-macOS.dmg` 다운로드
+          2. DMG 파일을 더블클릭하여 마운트
+          3. `LocalTranslate.app`을 Applications 폴더로 드래그
+
+          #### ZIP 파일 사용
+          1. `LocalTranslate-macOS.zip` 다운로드
+          2. ZIP 파일 압축 해제
+          3. `LocalTranslate.app`을 Applications 폴더로 이동
+
+          ### ⚠️ macOS 보안 경고
+          처음 실행 시 보안 경고가 표시될 수 있습니다:
+          ```bash
+          xattr -cr /Applications/LocalTranslate.app
+          ```
+          또는 **시스템 설정 > 개인정보 보호 및 보안**에서 "확인 없이 열기"를 클릭하세요.
+
+          ### 시스템 요구사항
+          - macOS 10.13 이상
+          - 최소 8GB RAM
+          - 약 1GB 저장 공간
+
+          ---
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: LocalTranslate ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+          files: |
+            dist/LocalTranslate-macOS.zip
+            dist/LocalTranslate-macOS.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
