@@ -4,8 +4,8 @@ from lingua import Language, LanguageDetectorBuilder
 from typing import Optional, Tuple
 from functools import lru_cache
 
-from ..utils.logger import get_logger
-from .config import LanguageCode
+from utils.logger import get_logger
+from core.config import LanguageCode
 
 logger = get_logger(__name__)
 

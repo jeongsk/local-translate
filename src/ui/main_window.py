@@ -13,11 +13,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QShortcut, QKeySequence
 
-from ..utils.logger import get_logger
-from ..core.translator import TranslationService
-from ..core.preferences import UserPreferences
-from ..core.config import config
-from .language_selector import LanguageSelector
+from utils.logger import get_logger
+from core.translator import TranslationService
+from core.preferences import UserPreferences
+from core.config import config
+from ui.language_selector import LanguageSelector
 
 logger = get_logger(__name__)
 

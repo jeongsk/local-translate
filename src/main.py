@@ -210,4 +210,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # PyInstaller frozen 환경에서 multiprocessing 지원
+    from multiprocessing import freeze_support
+    freeze_support()
+
     sys.exit(main())

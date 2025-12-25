@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QSplashScreen, QVBoxLayout, QLabel, QProgressBar, 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter, QColor
 
-from ..utils.logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 

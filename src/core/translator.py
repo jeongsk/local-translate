@@ -5,11 +5,11 @@ from typing import Optional
 import time
 import uuid
 
-from ..utils.logger import get_logger
-from ..utils.async_helpers import Worker
-from .model_manager import ModelManager
-from .language_detector import LanguageDetector
-from .config import config
+from utils.logger import get_logger
+from utils.async_helpers import Worker
+from core.model_manager import ModelManager
+from core.language_detector import LanguageDetector
+from core.config import config
 
 logger = get_logger(__name__)
 
