@@ -115,6 +115,37 @@ class MainWindow(QMainWindow):
         self.source_text.setAcceptRichText(False)
         main_layout.addWidget(self.source_text)
 
+        # Translate button
+        translate_button_layout = QHBoxLayout()
+        translate_button_layout.addStretch()
+
+        self.translate_button = QPushButton("번역 (Translate)")
+        self.translate_button.setEnabled(False)
+        self.translate_button.setMinimumWidth(120)
+        self.translate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #007AFF;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0056CC;
+            }
+            QPushButton:pressed {
+                background-color: #004499;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #888888;
+            }
+        """)
+        translate_button_layout.addWidget(self.translate_button)
+
+        main_layout.addLayout(translate_button_layout)
+
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -151,8 +182,11 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         """Connect signals and slots."""
-        # Text input changes
+        # Text input changes (for button state management)
         self.source_text.textChanged.connect(self._on_text_changed)
+
+        # Translate button click
+        self.translate_button.clicked.connect(self._on_translate_clicked)
 
         # Language selection changes
         self.source_lang_selector.languageChanged.connect(self._on_language_changed)
@@ -174,6 +208,14 @@ class MainWindow(QMainWindow):
         # Cmd/Ctrl+C to copy translation result when result text has focus
         copy_shortcut = QShortcut(QKeySequence.StandardKey.Copy, self.result_text)
         copy_shortcut.activated.connect(self._on_copy_clicked)
+
+        # Cmd/Ctrl+Enter to trigger translation
+        translate_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        translate_shortcut.activated.connect(self._on_translate_clicked)
+
+        # Also support Cmd+Enter on macOS (Ctrl+Return works as Cmd+Return)
+        translate_shortcut_alt = QShortcut(QKeySequence("Meta+Return"), self)
+        translate_shortcut_alt.activated.connect(self._on_translate_clicked)
 
         logger.debug("Keyboard shortcuts configured")
 
@@ -224,13 +266,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_text_changed(self) -> None:
-        """Handle source text changes."""
+        """Handle source text changes - manages translate button state."""
         text = self.source_text.toPlainText().strip()
 
         if not text:
             self.result_text.clear()
             self.status_label.clear()
             self.copy_button.setEnabled(False)
+            self.translate_button.setEnabled(False)
             return
 
         # Validate text length
@@ -238,6 +281,19 @@ class MainWindow(QMainWindow):
             self.status_label.setText(
                 f"⚠️ 텍스트가 너무 깁니다 ({len(text)} / {config.performance.max_text_length} 자)"
             )
+            self.translate_button.setEnabled(False)
+            return
+
+        # Enable translate button for valid text
+        self.translate_button.setEnabled(True)
+        self.status_label.clear()
+
+    @Slot()
+    def _on_translate_clicked(self) -> None:
+        """Handle translate button click."""
+        text = self.source_text.toPlainText().strip()
+
+        if not text:
             return
 
         # Get selected languages
@@ -247,10 +303,11 @@ class MainWindow(QMainWindow):
         # Get target language display name
         target_display_name = self.target_lang_selector.get_language_display_name(target_lang)
 
-        # Submit translation with debouncing
+        # Submit translation immediately (no debouncing)
         self.current_task_id = self.translation_service.translate(
-            text=text, source_lang=source_lang, target_lang=target_display_name, debounce=True
+            text=text, source_lang=source_lang, target_lang=target_display_name, debounce=False
         )
+        logger.debug(f"Translation requested: {self.current_task_id}")
 
     @Slot(str)
     def _on_language_changed(self, language_code: str) -> None:
@@ -265,12 +322,6 @@ class MainWindow(QMainWindow):
         self.preferences.target_language = self.target_lang_selector.get_selected_language()
 
         logger.info(f"Language changed: {self.preferences.source_language} -> {self.preferences.target_language}")
-
-        # Re-translate if source text exists
-        text = self.source_text.toPlainText().strip()
-        if text:
-            logger.debug("Re-translating after language change")
-            self._on_text_changed()
 
     @Slot()
     def _on_swap_languages(self) -> None:
@@ -308,6 +359,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.status_label.setText("번역 중...")
         self.copy_button.setEnabled(False)
+        self.translate_button.setEnabled(False)
         logger.debug(f"Translation started: {task_id}")
 
     @Slot(str, int, str)
@@ -331,6 +383,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_label.setText(f"✓ 번역 완료 (감지된 언어: {source_lang})")
         self.copy_button.setEnabled(True)
+        self.translate_button.setEnabled(True)
         logger.info(f"Translation complete: {task_id}")
 
     @Slot(str, str)
@@ -343,6 +396,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_label.setText("번역 실패")
         self.copy_button.setEnabled(False)
+        self.translate_button.setEnabled(True)
         logger.error(f"Translation error: {error_message}")
 
     @Slot()
