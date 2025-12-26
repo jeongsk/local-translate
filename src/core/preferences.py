@@ -20,7 +20,7 @@ class UserPreferences:
 
     SETTINGS_VERSION = 1
 
-    def __init__(self, organization: str = "OpenDeepL", application: str = "OpenDeepL"):
+    def __init__(self, organization: str = "LocalTranslate", application: str = "LocalTranslate"):
         """
         Initialize preferences manager.
 

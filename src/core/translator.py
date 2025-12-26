@@ -1,9 +1,11 @@
 """Translation service with async execution and debouncing."""
 
-from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
-from typing import Optional
+import os
 import time
 import uuid
+from typing import Callable, Optional
+
+from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
 
 from utils.logger import get_logger
 from utils.async_helpers import Worker
@@ -46,7 +48,10 @@ class TranslationService(QObject):
 
         # Thread pool for async execution
         self.thread_pool = QThreadPool.globalInstance()
-        self.thread_pool.setMaxThreadCount(2)  # Max 2 concurrent translations
+        # Optimize thread count based on CPU cores (min 2, max 4)
+        cpu_count = os.cpu_count() or 2
+        max_threads = min(4, max(2, cpu_count))
+        self.thread_pool.setMaxThreadCount(max_threads)
 
         # Debouncing support
         self.debounce_timer = QTimer()
@@ -153,7 +158,7 @@ class TranslationService(QObject):
         text: str,
         source_lang: str,
         target_lang: str,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable[[int, str], None]] = None,
     ) -> tuple[str, str]:
         """
         Worker function for translation (runs in background thread).
