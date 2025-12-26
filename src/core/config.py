@@ -196,7 +196,7 @@ class AppConfig:
 
     app_name: str = "LocalTranslate"
     organization: str = "LocalTranslate"
-    version: str = "0.1.1"
+    version: str = "0.1.2"
 
     # UI Configuration
     window_min_width: int = 800
