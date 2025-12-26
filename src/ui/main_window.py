@@ -119,9 +119,10 @@ class MainWindow(QMainWindow):
         translate_button_layout = QHBoxLayout()
         translate_button_layout.addStretch()
 
-        self.translate_button = QPushButton("번역 (Translate)")
+        self.translate_button = QPushButton("번역 (⌘↵)")
+        self.translate_button.setToolTip("Cmd+Enter 또는 Ctrl+Enter로 번역 실행")
         self.translate_button.setEnabled(False)
-        self.translate_button.setMinimumWidth(120)
+        self.translate_button.setMinimumWidth(140)
         self.translate_button.setStyleSheet("""
             QPushButton {
                 background-color: #007AFF;
@@ -256,6 +257,9 @@ class MainWindow(QMainWindow):
 
         logger.info(f"Language preferences restored: {source_lang} -> {target_lang}")
 
+        # Update swap button state based on restored language
+        self._update_swap_button_state()
+
         # Restore dark mode preference
         if self.theme_manager and hasattr(self, 'dark_mode_action'):
             dark_mode = self.preferences.dark_mode
@@ -321,7 +325,21 @@ class MainWindow(QMainWindow):
         self.preferences.source_language = self.source_lang_selector.get_selected_language()
         self.preferences.target_language = self.target_lang_selector.get_selected_language()
 
+        # Update swap button state
+        self._update_swap_button_state()
+
         logger.info(f"Language changed: {self.preferences.source_language} -> {self.preferences.target_language}")
+
+    def _update_swap_button_state(self) -> None:
+        """Update swap button enabled state based on source language."""
+        source_lang = self.source_lang_selector.get_selected_language()
+        is_auto = source_lang == "auto"
+
+        self.swap_button.setEnabled(not is_auto)
+        if is_auto:
+            self.swap_button.setToolTip("자동 감지 모드에서는 언어 교환을 할 수 없습니다")
+        else:
+            self.swap_button.setToolTip("소스 ↔ 타겟 언어 교환")
 
     @Slot()
     def _on_swap_languages(self) -> None:
@@ -392,12 +410,38 @@ class MainWindow(QMainWindow):
         if task_id != self.current_task_id:
             return  # Ignore old tasks
 
-        self.result_text.setPlainText(f"❌ 번역 오류: {error_message}")
+        # Create user-friendly error message
+        user_message = self._get_user_friendly_error(error_message)
+        self.result_text.setPlainText(
+            f"❌ 번역 실패\n\n"
+            f"오류: {user_message}\n\n"
+            f"해결 방법:\n"
+            f"• 텍스트 길이를 확인해 주세요 (최대 2,000자)\n"
+            f"• 지원되는 언어인지 확인해 주세요\n"
+            f"• '번역' 버튼을 다시 눌러 재시도해 주세요"
+        )
         self.progress_bar.setVisible(False)
-        self.status_label.setText("번역 실패")
+        self.status_label.setText("⚠️ 번역 실패 - 다시 시도해 주세요")
         self.copy_button.setEnabled(False)
         self.translate_button.setEnabled(True)
         logger.error(f"Translation error: {error_message}")
+
+    def _get_user_friendly_error(self, error_message: str) -> str:
+        """Convert technical error message to user-friendly message."""
+        error_lower = error_message.lower()
+
+        if "memory" in error_lower or "oom" in error_lower:
+            return "메모리가 부족합니다. 다른 프로그램을 종료하고 다시 시도해 주세요."
+        elif "timeout" in error_lower:
+            return "번역 시간이 초과되었습니다. 더 짧은 텍스트로 시도해 주세요."
+        elif "model" in error_lower and "load" in error_lower:
+            return "번역 모델을 불러올 수 없습니다. 앱을 재시작해 주세요."
+        elif "empty" in error_lower:
+            return "번역할 텍스트를 입력해 주세요."
+        elif "too long" in error_lower:
+            return "텍스트가 너무 깁니다. 2,000자 이하로 줄여주세요."
+        else:
+            return error_message
 
     @Slot()
     def _on_copy_clicked(self) -> None:
