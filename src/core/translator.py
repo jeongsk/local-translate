@@ -12,8 +12,21 @@ from utils.async_helpers import Worker
 from core.model_manager import ModelManager
 from core.language_detector import LanguageDetector
 from core.config import config
+from core.error_handler import ErrorClassifier, ErrorType, TranslationError
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class RetryState:
+    """Tracks retry state for a translation task."""
+
+    task_id: str
+    text: str
+    source_lang: str
+    target_lang: str
+    attempt: int = 0
+    max_attempts: int = 4  # 1 initial + 3 retries
 
 
 class TranslationService(QObject):
@@ -25,7 +38,8 @@ class TranslationService(QObject):
     translationStarted = Signal(str)  # task_id
     translationProgress = Signal(str, int, str)  # task_id, percentage, message
     translationComplete = Signal(str, str, str)  # task_id, source_lang, translated_text
-    translationError = Signal(str, str)  # task_id, error_message
+    translationError = Signal(str, object)  # task_id, TranslationError
+    translationRetrying = Signal(str, int, int, int)  # task_id, attempt, max_attempts, delay_ms
 
     def __init__(
         self,
@@ -62,6 +76,12 @@ class TranslationService(QObject):
         # Track active tasks
         self.active_tasks: dict[str, Worker] = {}
         self.last_task_id: Optional[str] = None
+
+        # Retry management
+        self.retry_states: dict[str, RetryState] = {}
+
+        # Timeout management
+        self.timeout_timers: dict[str, QTimer] = {}
 
         logger.info(
             f"TranslationService initialized with {debounce_ms}ms debounce, "
@@ -119,7 +139,7 @@ class TranslationService(QObject):
 
     def _execute_task(self, task_id: str, text: str, source_lang: str, target_lang: str) -> None:
         """
-        Execute translation task in thread pool.
+        Execute translation task with retry support.
 
         Args:
             task_id: Task identifier
@@ -130,28 +150,138 @@ class TranslationService(QObject):
         # Cancel all currently active tasks (most recent wins)
         self.cancel_all_tasks()
 
+        # Initialize retry state
+        retry_state = RetryState(
+            task_id=task_id,
+            text=text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            max_attempts=config.error_handling.max_retries + 1,
+        )
+        self.retry_states[task_id] = retry_state
+
+        # Start first attempt
+        self._execute_attempt(retry_state)
+
+    def _execute_attempt(self, retry_state: RetryState) -> None:
+        """
+        Execute a single translation attempt.
+
+        Args:
+            retry_state: Current retry state
+        """
+        retry_state.attempt += 1
+        task_id = retry_state.task_id
+
         # Create worker
         worker = Worker(
             task_id=task_id,
             fn=self._translate_worker,
-            text=text,
-            source_lang=source_lang,
-            target_lang=target_lang,
+            text=retry_state.text,
+            source_lang=retry_state.source_lang,
+            target_lang=retry_state.target_lang,
         )
 
         # Connect signals
         worker.signals.started.connect(self._on_worker_started)
         worker.signals.progress.connect(self._on_worker_progress)
         worker.signals.result.connect(self._on_worker_result)
-        worker.signals.error.connect(self._on_worker_error)
+        worker.signals.error.connect(self._on_worker_error_with_retry)
         worker.signals.finished.connect(self._on_worker_finished)
 
         # Track active task
         self.active_tasks[task_id] = worker
 
+        # Setup timeout timer
+        self._setup_timeout(task_id)
+
         # Submit to thread pool
         self.thread_pool.start(worker)
-        logger.info(f"Task {task_id} submitted to thread pool")
+        logger.info(
+            f"Task {task_id} attempt {retry_state.attempt}/{retry_state.max_attempts} "
+            f"submitted to thread pool"
+        )
+
+    def _setup_timeout(self, task_id: str) -> None:
+        """Setup timeout timer for a translation task."""
+        # Cancel existing timer if any
+        self._cancel_timeout(task_id)
+
+        timeout_ms = config.error_handling.translation_timeout_ms
+
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._on_timeout(task_id))
+
+        # Store timer reference
+        self.timeout_timers[task_id] = timer
+
+        timer.start(timeout_ms)
+        logger.debug(f"Timeout set for {task_id}: {timeout_ms}ms")
+
+    def _cancel_timeout(self, task_id: str) -> None:
+        """Cancel timeout timer for a task."""
+        if task_id in self.timeout_timers:
+            self.timeout_timers[task_id].stop()
+            del self.timeout_timers[task_id]
+
+    def _on_timeout(self, task_id: str) -> None:
+        """Handle translation timeout."""
+        logger.warning(f"Translation timeout: {task_id}")
+
+        # Cancel the worker
+        if task_id in self.active_tasks:
+            self.active_tasks[task_id].cancel()
+
+        # Create timeout error
+        error = ErrorClassifier.create_timeout_error()
+
+        # Try retry or emit error
+        self._handle_error_with_retry(task_id, error)
+
+    def _calculate_retry_delay(self, attempt: int) -> int:
+        """Calculate retry delay with exponential backoff."""
+        cfg = config.error_handling
+        delay = cfg.initial_retry_delay_ms * (cfg.backoff_multiplier ** (attempt - 1))
+        return min(int(delay), cfg.max_retry_delay_ms)
+
+    def _handle_error_with_retry(self, task_id: str, error: TranslationError) -> None:
+        """Handle error with potential retry."""
+        retry_state = self.retry_states.get(task_id)
+        if not retry_state:
+            self.translationError.emit(task_id, error)
+            return
+
+        # Determine max retries based on error type
+        max_retries = config.error_handling.max_retries
+        if error.error_type == ErrorType.MEMORY:
+            max_retries = config.error_handling.memory_error_max_retries
+
+        # Check if retryable and within limits
+        if error.is_retryable and retry_state.attempt <= max_retries:
+            # Calculate delay with exponential backoff
+            delay_ms = self._calculate_retry_delay(retry_state.attempt)
+
+            logger.info(
+                f"Retrying {task_id}: attempt {retry_state.attempt}/{max_retries + 1}, "
+                f"delay {delay_ms}ms, error: {error.error_type.name}"
+            )
+
+            # Emit retrying signal
+            self.translationRetrying.emit(
+                task_id, retry_state.attempt, max_retries + 1, delay_ms
+            )
+
+            # Schedule retry
+            QTimer.singleShot(delay_ms, lambda: self._execute_attempt(retry_state))
+        else:
+            # Max retries exceeded or not retryable
+            logger.error(
+                f"Translation failed after {retry_state.attempt} attempts: {task_id}, "
+                f"error: {error.error_type.name}"
+            )
+            self.translationError.emit(task_id, error)
+            self.retry_states.pop(task_id, None)
 
     def _translate_worker(
         self,
@@ -228,6 +358,13 @@ class TranslationService(QObject):
             for worker in self.active_tasks.values():
                 worker.cancel()
 
+        # Cancel all timeout timers
+        for task_id in list(self.timeout_timers.keys()):
+            self._cancel_timeout(task_id)
+
+        # Clear retry states
+        self.retry_states.clear()
+
     def shutdown(self) -> None:
         """Clean shutdown - cancel all tasks and wait for completion."""
         logger.info("Shutting down translation service...")
@@ -248,15 +385,31 @@ class TranslationService(QObject):
 
     def _on_worker_result(self, task_id: str, result: tuple) -> None:
         """Handle worker result signal."""
+        # Cancel timeout timer on success
+        self._cancel_timeout(task_id)
+
+        # Clean up retry state on success
+        self.retry_states.pop(task_id, None)
+
         source_lang, translated_text = result
         logger.info(f"Worker result received: {task_id}")
         self.translationComplete.emit(task_id, source_lang, translated_text)
 
-    def _on_worker_error(self, task_id: str, error_message: str, traceback_str: str) -> None:
-        """Handle worker error signal."""
+    def _on_worker_error_with_retry(
+        self, task_id: str, error_message: str, traceback_str: str
+    ) -> None:
+        """Handle worker error with retry logic."""
         logger.error(f"Worker error for {task_id}: {error_message}")
         logger.debug(f"Traceback:\n{traceback_str}")
-        self.translationError.emit(task_id, error_message)
+
+        # Cancel timeout timer
+        self._cancel_timeout(task_id)
+
+        # Classify the error
+        error = ErrorClassifier.classify_from_message(error_message, traceback_str)
+
+        # Handle with retry logic
+        self._handle_error_with_retry(task_id, error)
 
     def _on_worker_finished(self, task_id: str) -> None:
         """Handle worker finished signal."""

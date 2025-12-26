@@ -174,6 +174,23 @@ class PerformanceConfig:
 
 
 @dataclass(frozen=True)
+class ErrorHandlingConfig:
+    """Error handling and retry configuration."""
+
+    # Retry settings
+    max_retries: int = 3  # Maximum retry attempts
+    initial_retry_delay_ms: int = 1000  # First retry delay (1 second)
+    max_retry_delay_ms: int = 10000  # Maximum delay (10 seconds)
+    backoff_multiplier: float = 2.0  # Exponential backoff multiplier
+
+    # Timeout settings
+    translation_timeout_ms: int = 60000  # Translation timeout (60 seconds)
+
+    # Special handling for memory errors
+    memory_error_max_retries: int = 1  # Only retry once for memory errors
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Application-wide configuration."""
 
@@ -192,6 +209,9 @@ class AppConfig:
 
     # Performance Configuration
     performance: PerformanceConfig = PerformanceConfig()
+
+    # Error Handling Configuration
+    error_handling: ErrorHandlingConfig = ErrorHandlingConfig()
 
     # Logging
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR
