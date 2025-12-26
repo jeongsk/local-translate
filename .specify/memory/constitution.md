@@ -15,7 +15,7 @@ Sync Impact Report:
 - Follow-up TODOs: None
 -->
 
-# Open DeepL Translation App Constitution
+# LocalTranslate App Constitution
 
 ## Core Principles
 
