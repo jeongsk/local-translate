@@ -266,7 +266,8 @@ class ModelManager:
         if self.device == "mps" and torch.backends.mps.is_available():
             try:
                 stats["allocated_mb"] = torch.mps.current_allocated_memory() / 1024**2
-            except:
+            except (AttributeError, RuntimeError) as e:
+                logger.debug(f"MPS memory stats unavailable: {e}")
                 stats["allocated_mb"] = 0
         elif self.device == "cuda" and torch.cuda.is_available():
             stats["allocated_mb"] = torch.cuda.memory_allocated() / 1024**2

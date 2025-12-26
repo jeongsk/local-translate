@@ -95,6 +95,11 @@ def main() -> int:
     splash.show_progress(0, "애플리케이션 초기화 중...")
     app.processEvents()
 
+    # Track resources for cleanup
+    model_manager = None
+    translation_service = None
+    exit_code = 1
+
     try:
         # Initialize components
         splash.show_progress(5, "사용자 설정 로드 중...")
@@ -187,14 +192,7 @@ def main() -> int:
 
         # Run application
         exit_code = app.exec()
-
-        # Cleanup
-        logger.info("Shutting down application...")
-        translation_service.shutdown()
-        model_manager.unload()
-
         logger.info(f"{config.app_name} exited with code {exit_code}")
-        return exit_code
 
     except Exception as e:
         logger.error(f"Application startup error: {e}", exc_info=True)
@@ -206,7 +204,28 @@ def main() -> int:
             "시작 오류",
             f"애플리케이션을 시작할 수 없습니다:\n\n{e}",
         )
-        return 1
+        exit_code = 1
+
+    finally:
+        # Always cleanup resources
+        logger.info("Cleaning up resources...")
+        if translation_service is not None:
+            try:
+                translation_service.shutdown()
+                logger.info("Translation service shut down")
+            except Exception as e:
+                logger.error(f"Error shutting down translation service: {e}")
+
+        if model_manager is not None:
+            try:
+                model_manager.unload()
+                logger.info("Model manager unloaded")
+            except Exception as e:
+                logger.error(f"Error unloading model manager: {e}")
+
+        logger.info("Resource cleanup complete")
+
+    return exit_code
 
 
 if __name__ == "__main__":
