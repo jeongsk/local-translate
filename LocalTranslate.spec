@@ -36,6 +36,7 @@ hidden_imports = [
     'transformers.models.auto.modeling_auto',
     'transformers.models.auto.tokenization_auto',
     # 기타 필수 모듈
+    'dataclasses',
     'packaging',
     'packaging.version',
     'packaging.specifiers',

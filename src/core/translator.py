@@ -3,6 +3,7 @@
 import os
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
