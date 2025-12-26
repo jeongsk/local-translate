@@ -33,20 +33,13 @@ except (AttributeError, RuntimeError) as e:
 
 ---
 
-### 1.2 Preferences 기본값 오류 수정
+### 1.2 Preferences 기본값 오류 수정 ✅ (완료)
 **파일**: `src/core/preferences.py:23`
 
-**현재 코드**:
-```python
-def __init__(self, organization: str = "OpenDeepL", application: str = "OpenDeepL"):
-```
-
-**수정 방향**:
+**수정 완료**:
 ```python
 def __init__(self, organization: str = "LocalTranslate", application: str = "LocalTranslate"):
 ```
-
-**영향도**: 높음 - 사용자 설정이 올바르게 저장/로드되지 않음
 
 ---
 
