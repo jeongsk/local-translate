@@ -17,6 +17,7 @@ from utils.logger import get_logger
 from core.translator import TranslationService
 from core.preferences import UserPreferences
 from core.config import config
+from core.error_handler import ErrorType, TranslationError
 from ui.language_selector import LanguageSelector
 
 logger = get_logger(__name__)
@@ -199,6 +200,7 @@ class MainWindow(QMainWindow):
         self.translation_service.translationProgress.connect(self._on_translation_progress)
         self.translation_service.translationComplete.connect(self._on_translation_complete)
         self.translation_service.translationError.connect(self._on_translation_error)
+        self.translation_service.translationRetrying.connect(self._on_translation_retrying)
 
         # Button clicks
         self.copy_button.clicked.connect(self._on_copy_clicked)
@@ -404,27 +406,64 @@ class MainWindow(QMainWindow):
         self.translate_button.setEnabled(True)
         logger.info(f"Translation complete: {task_id}")
 
-    @Slot(str, str)
-    def _on_translation_error(self, task_id: str, error_message: str) -> None:
-        """Handle translation error."""
+    @Slot(str, int, int, int)
+    def _on_translation_retrying(
+        self, task_id: str, attempt: int, max_attempts: int, delay_ms: int
+    ) -> None:
+        """Handle translation retry notification."""
         if task_id != self.current_task_id:
             return  # Ignore old tasks
 
-        # Create user-friendly error message
-        user_message = self._get_user_friendly_error(error_message)
-        self.result_text.setPlainText(
-            f"❌ 번역 실패\n\n"
-            f"오류: {user_message}\n\n"
-            f"해결 방법:\n"
-            f"• 텍스트 길이를 확인해 주세요 (최대 2,000자)\n"
-            f"• 지원되는 언어인지 확인해 주세요\n"
-            f"• '번역' 버튼을 다시 눌러 재시도해 주세요"
+        delay_sec = delay_ms / 1000
+        self.status_label.setText(
+            f"재시도 중... ({attempt}/{max_attempts}) - {delay_sec:.1f}초 후 재시도"
         )
+        self.progress_bar.setFormat(f"재시도 대기 중... ({attempt}/{max_attempts})")
+        logger.info(f"Retrying translation: {task_id}, attempt {attempt}/{max_attempts}")
+
+    @Slot(str, object)
+    def _on_translation_error(self, task_id: str, error) -> None:
+        """Handle translation error with detailed information."""
+        if task_id != self.current_task_id:
+            return  # Ignore old tasks
+
+        # Handle TranslationError object
+        if isinstance(error, TranslationError):
+            # Error type icons
+            icons = {
+                ErrorType.NETWORK: "🌐",
+                ErrorType.MEMORY: "💾",
+                ErrorType.MODEL: "🤖",
+                ErrorType.TIMEOUT: "⏱️",
+                ErrorType.VALIDATION: "⚠️",
+                ErrorType.UNKNOWN: "❌",
+            }
+            icon = icons.get(error.error_type, "❌")
+
+            # Detailed error message
+            error_text = f"""{icon} 번역 오류
+
+[원인]
+{error.cause}
+
+[해결 방법]
+{error.solution}
+
+[상세 정보]
+{error.message}"""
+
+            self.result_text.setPlainText(error_text)
+            self.status_label.setText(f"{icon} 번역 실패 - {error.cause}")
+            logger.error(f"Translation error: {error.error_type.name} - {error.message}")
+        else:
+            # Fallback for string error messages (backward compatibility)
+            self.result_text.setPlainText(f"❌ 번역 오류: {error}")
+            self.status_label.setText("번역 실패")
+            logger.error(f"Translation error: {error}")
+
         self.progress_bar.setVisible(False)
-        self.status_label.setText("⚠️ 번역 실패 - 다시 시도해 주세요")
         self.copy_button.setEnabled(False)
         self.translate_button.setEnabled(True)
-        logger.error(f"Translation error: {error_message}")
 
     def _get_user_friendly_error(self, error_message: str) -> str:
         """Convert technical error message to user-friendly message."""

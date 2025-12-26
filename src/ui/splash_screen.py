@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QSplashScreen, QVBoxLayout, QLabel, QProgressBar, 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QPainter, QColor
 
+from core.config import config
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -28,11 +29,18 @@ class SplashScreen(QSplashScreen):
         layout.setSpacing(20)
 
         # Title
-        title_label = QLabel("Open DeepL")
+        title_label = QLabel("LocalTranslate")
         title_label.setStyleSheet(
             "color: white; font-size: 32px; font-weight: bold; qproperty-alignment: AlignCenter;"
         )
         layout.addWidget(title_label)
+
+        # Version
+        version_label = QLabel(f"v{config.version}")
+        version_label.setStyleSheet(
+            "color: #888888; font-size: 14px; qproperty-alignment: AlignCenter;"
+        )
+        layout.addWidget(version_label)
 
         # Subtitle
         subtitle_label = QLabel("로컬 번역 애플리케이션")
