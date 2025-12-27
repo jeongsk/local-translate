@@ -2,7 +2,8 @@
 
 from typing import Optional
 from PySide6.QtWidgets import QComboBox, QWidget
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt, QPoint
+from PySide6.QtGui import QPainter, QColor, QPolygon
 
 from core.config import SUPPORTED_LANGUAGES, LanguageCode, Language
 from utils.logger import get_logger
@@ -126,3 +127,32 @@ class LanguageSelector(QComboBox):
                 return lang.display_name
 
         return language_code
+
+    def paintEvent(self, event) -> None:
+        """Custom paint to draw dropdown arrow."""
+        super().paintEvent(event)
+
+        # Draw dropdown arrow
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Get arrow color based on palette
+        arrow_color = self.palette().text().color()
+        arrow_color.setAlpha(150)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(arrow_color)
+
+        # Calculate arrow position (right side)
+        rect = self.rect()
+        arrow_size = 6
+        x = rect.right() - 14
+        y = rect.center().y() - arrow_size // 3
+
+        # Draw triangle pointing down
+        triangle = QPolygon([
+            QPoint(x - arrow_size, y),
+            QPoint(x + arrow_size, y),
+            QPoint(x, y + arrow_size),
+        ])
+        painter.drawPolygon(triangle)
+        painter.end()
