@@ -149,6 +149,8 @@ class ModelConfig:
     quantization: str = "none"  # int8, int4, none - using "none" for MPS compatibility
     max_new_tokens: int = 512
     dtype: str = "bfloat16"
+    repetition_penalty: float = 1.2
+    no_repeat_ngram_size: int = 3
 
 
 @dataclass(frozen=True)

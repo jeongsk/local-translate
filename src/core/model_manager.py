@@ -212,12 +212,17 @@ class ModelManager:
                 progress_callback(50, "Translating...")
 
             # Generate translation
+            # 입력 길이에 비례한 동적 max_new_tokens (최소 50, 최대 config값)
+            dynamic_max_tokens = max(50, min(input_length * 3, self.config.max_new_tokens))
+
             with torch.inference_mode():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=self.config.max_new_tokens,
+                    max_new_tokens=dynamic_max_tokens,
                     do_sample=False,
                     eos_token_id=self.tokenizer.eos_token_id,
+                    repetition_penalty=self.config.repetition_penalty,
+                    no_repeat_ngram_size=self.config.no_repeat_ngram_size,
                 )
 
             if progress_callback:
