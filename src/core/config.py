@@ -193,6 +193,15 @@ class ErrorHandlingConfig:
 
 
 @dataclass(frozen=True)
+class HistoryConfig:
+    """Translation history configuration."""
+
+    max_entries: int = 50  # Maximum number of history entries
+    preview_length: int = 100  # Characters to show in preview
+    search_debounce_ms: int = 150  # Search debounce delay
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Application-wide configuration."""
 
@@ -214,6 +223,9 @@ class AppConfig:
 
     # Error Handling Configuration
     error_handling: ErrorHandlingConfig = ErrorHandlingConfig()
+
+    # History Configuration
+    history: HistoryConfig = HistoryConfig()
 
     # Logging
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR

@@ -228,7 +228,7 @@ class TestAppConfig:
 
         assert app_config.app_name == "LocalTranslate"
         assert app_config.organization == "LocalTranslate"
-        assert app_config.version == "0.1.0"
+        assert app_config.version == "0.1.2"
         assert app_config.window_min_width == 800
         assert app_config.window_min_height == 600
 
