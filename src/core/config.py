@@ -207,7 +207,7 @@ class AppConfig:
 
     app_name: str = "LocalTranslate"
     organization: str = "LocalTranslate"
-    version: str = "0.1.2"
+    version: str = "0.2.0"
 
     # About dialog information
     copyright_year: str = "2024-2025"

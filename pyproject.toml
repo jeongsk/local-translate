@@ -1,6 +1,6 @@
 [project]
 name = "local-translate"
-version = "0.1.2"
+version = "0.2.0"
 description = "Local translation application using Yanolja NEXT Rosetta-4B model with PySide6 GUI"
 readme = "README.md"
 requires-python = ">=3.11"
