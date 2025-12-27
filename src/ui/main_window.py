@@ -1,11 +1,12 @@
 """Main application window."""
 
-from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtCore import QObject, QThread, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QSplitter,
@@ -24,6 +25,20 @@ from ui.language_selector import LanguageSelector
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class UpdateCheckerWorker(QObject):
+    """Worker for checking updates in a background thread."""
+
+    finished = Signal(object)
+
+    def run(self) -> None:
+        """Run the update check."""
+        from core.update_checker import UpdateChecker
+
+        checker = UpdateChecker()
+        result = checker.check()
+        self.finished.emit(result)
 
 
 class MainWindow(QMainWindow):
@@ -272,8 +287,13 @@ class MainWindow(QMainWindow):
         logger.debug("Keyboard shortcuts configured")
 
     def _setup_menu_bar(self) -> None:
-        """Setup menu bar with File and View menus."""
+        """Setup menu bar with app menu, View menu, and Help menu."""
         menubar = self.menuBar()
+
+        # About action (will be placed in app menu on macOS)
+        about_action = QAction(f"&About {config.app_name}", self)
+        about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        about_action.triggered.connect(self._on_show_about)
 
         # View menu
         view_menu = menubar.addMenu("&View")
@@ -294,6 +314,17 @@ class MainWindow(QMainWindow):
             self.dark_mode_action.setCheckable(True)
             self.dark_mode_action.setChecked(self.theme_manager.is_dark_mode)
             self.dark_mode_action.triggered.connect(self._on_toggle_dark_mode)
+
+        # Help menu
+        help_menu = menubar.addMenu("&Help")
+
+        # Check for Updates action
+        check_updates_action = QAction("Check for &Updates...", self)
+        check_updates_action.triggered.connect(self._on_check_for_updates)
+        help_menu.addAction(check_updates_action)
+
+        help_menu.addSeparator()
+        help_menu.addAction(about_action)
 
         logger.debug("Menu bar configured")
 
@@ -685,6 +716,50 @@ class MainWindow(QMainWindow):
         """
         self.preferences.set("history_panel_collapsed", collapsed)
         logger.debug(f"History panel {'collapsed' if collapsed else 'expanded'}")
+
+    @Slot()
+    def _on_show_about(self) -> None:
+        """Show the About dialog."""
+        from ui.about_dialog import AboutDialog
+
+        dialog = AboutDialog(self)
+        dialog.exec()
+        logger.debug("About dialog shown")
+
+    @Slot()
+    def _on_check_for_updates(self) -> None:
+        """Check for updates in a background thread."""
+        from core.update_checker import UpdateChecker, UpdateCheckResult
+
+        # Show checking message
+        self.status_label.setText("업데이트 확인 중...")
+        logger.info("Checking for updates...")
+
+        # Create worker thread
+        self._update_thread = QThread()
+        self._update_worker = UpdateCheckerWorker()
+        self._update_worker.moveToThread(self._update_thread)
+
+        # Connect signals
+        self._update_thread.started.connect(self._update_worker.run)
+        self._update_worker.finished.connect(self._on_update_check_complete)
+        self._update_worker.finished.connect(self._update_thread.quit)
+        self._update_worker.finished.connect(self._update_worker.deleteLater)
+        self._update_thread.finished.connect(self._update_thread.deleteLater)
+
+        # Start thread
+        self._update_thread.start()
+
+    @Slot(object)
+    def _on_update_check_complete(self, result) -> None:
+        """Handle update check completion."""
+        from ui.update_dialog import UpdateDialog
+
+        self.status_label.clear()
+        logger.info(f"Update check complete: {result.status}")
+
+        dialog = UpdateDialog(result, self)
+        dialog.exec()
 
     def closeEvent(self, event) -> None:
         """Handle window close event."""
