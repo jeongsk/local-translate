@@ -72,23 +72,32 @@ class HistoryPanel(QWidget):
         # Collapsed bar (shown when collapsed)
         self._collapsed_bar = QWidget()
         self._collapsed_bar.setFixedWidth(self._collapsed_width)
+        self._collapsed_bar.setStyleSheet("""
+            QWidget {
+                background-color: palette(window);
+                border-left: 1px solid palette(mid);
+            }
+        """)
         collapsed_layout = QVBoxLayout(self._collapsed_bar)
         collapsed_layout.setContentsMargins(4, 8, 4, 8)
         collapsed_layout.setSpacing(4)
 
-        self._expand_btn = QPushButton("◀")
+        self._expand_btn = QPushButton("◂")
         self._expand_btn.setObjectName("expandButton")
         self._expand_btn.setFixedSize(28, 28)
         self._expand_btn.setToolTip("히스토리 패널 펼치기")
+        self._expand_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._expand_btn.clicked.connect(self._on_expand_clicked)
         self._expand_btn.setStyleSheet("""
-            QPushButton#expandButton {
+            QPushButton {
+                background-color: palette(button);
                 border: 1px solid palette(mid);
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 14px;
+                font-weight: bold;
             }
-            QPushButton#expandButton:hover {
-                background-color: palette(mid);
+            QPushButton:hover {
+                background-color: palette(light);
             }
         """)
         collapsed_layout.addWidget(self._expand_btn)
@@ -96,7 +105,7 @@ class HistoryPanel(QWidget):
         # Vertical label for collapsed state
         self._collapsed_label = QLabel("기\n록")
         self._collapsed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._collapsed_label.setStyleSheet("font-size: 12px; color: palette(text);")
+        self._collapsed_label.setStyleSheet("font-size: 12px; color: palette(text); background: transparent; border: none;")
         collapsed_layout.addWidget(self._collapsed_label)
         collapsed_layout.addStretch()
 
@@ -107,50 +116,87 @@ class HistoryPanel(QWidget):
         self._expanded_content = QWidget()
         self._expanded_content.setMinimumWidth(280)
         self._expanded_content.setMaximumWidth(400)
+        self._expanded_content.setStyleSheet("""
+            QWidget {
+                background-color: palette(window);
+            }
+        """)
         content_layout = QVBoxLayout(self._expanded_content)
-        content_layout.setContentsMargins(8, 8, 8, 8)
-        content_layout.setSpacing(8)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(10)
 
         # Header
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
 
-        # Collapse button
-        self._collapse_btn = QPushButton("▶")
-        self._collapse_btn.setObjectName("collapseButton")
-        self._collapse_btn.setFixedSize(24, 24)
-        self._collapse_btn.setToolTip("히스토리 패널 접기")
-        self._collapse_btn.clicked.connect(self._on_collapse_clicked)
-        self._collapse_btn.setStyleSheet("""
-            QPushButton#collapseButton {
-                border: 1px solid palette(mid);
-                border-radius: 4px;
-                font-size: 10px;
-            }
-            QPushButton#collapseButton:hover {
-                background-color: palette(mid);
-            }
-        """)
-        header_layout.addWidget(self._collapse_btn)
-
         title_label = QLabel("번역 기록")
         title_label.setObjectName("historyTitle")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
         header_layout.addWidget(title_label)
 
         header_layout.addStretch()
 
-        self._clear_all_btn = QPushButton("전체 삭제")
-        self._clear_all_btn.setObjectName("clearAllButton")
-        self._clear_all_btn.setFixedWidth(70)
-        header_layout.addWidget(self._clear_all_btn)
+        # Collapse button (moved to right side)
+        self._collapse_btn = QPushButton("▸")
+        self._collapse_btn.setObjectName("collapseButton")
+        self._collapse_btn.setFixedSize(28, 28)
+        self._collapse_btn.setToolTip("히스토리 패널 접기")
+        self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._collapse_btn.clicked.connect(self._on_collapse_clicked)
+        self._collapse_btn.setStyleSheet("""
+            QPushButton {
+                background-color: palette(button);
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: palette(light);
+            }
+        """)
+        header_layout.addWidget(self._collapse_btn)
 
         content_layout.addLayout(header_layout)
 
+        # Second row: clear all button
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        self._clear_all_btn = QPushButton("전체 삭제")
+        self._clear_all_btn.setObjectName("clearAllButton")
+        self._clear_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #dc3545;
+                border: 1px solid #dc3545;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #dc3545;
+                color: white;
+            }
+        """)
+        btn_layout.addWidget(self._clear_all_btn)
+        content_layout.addLayout(btn_layout)
+
         # Search input
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("검색...")
+        self._search_input.setPlaceholderText("🔍 검색...")
         self._search_input.setClearButtonEnabled(True)
+        self._search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 8px 12px;
+                border: 1px solid palette(mid);
+                border-radius: 6px;
+                background-color: palette(base);
+            }
+            QLineEdit:focus {
+                border-color: #007AFF;
+            }
+        """)
         content_layout.addWidget(self._search_input)
 
         # Scroll area for history items
