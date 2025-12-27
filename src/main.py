@@ -1,7 +1,6 @@
 """Application entry point."""
 
 import sys
-import os
 from pathlib import Path
 
 # PyInstaller 호환성: 실행 파일 경로 설정
@@ -20,18 +19,19 @@ else:
     if str(_src_path) not in sys.path:
         sys.path.insert(0, str(_src_path))
 
+from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import QThread, Signal, QObject
 
-from utils.logger import setup_logger, get_logger
-from ui.splash_screen import SplashScreen
-from ui.main_window import MainWindow
-from ui.styles import ThemeManager
-from core.model_manager import ModelManager
-from core.language_detector import LanguageDetector
-from core.translator import TranslationService
-from core.preferences import UserPreferences
 from core.config import config
+from core.history_store import HistoryStore
+from core.language_detector import LanguageDetector
+from core.model_manager import ModelManager
+from core.preferences import UserPreferences
+from core.translator import TranslationService
+from ui.main_window import MainWindow
+from ui.splash_screen import SplashScreen
+from ui.styles import ThemeManager
+from utils.logger import get_logger, setup_logger
 
 # Setup logging
 setup_logger(level="INFO")
@@ -105,6 +105,11 @@ def main() -> int:
         splash.show_progress(5, "사용자 설정 로드 중...")
         preferences = UserPreferences(config.organization, config.app_name)
 
+        splash.show_progress(8, "번역 기록 로드 중...")
+        history_store = HistoryStore(preferences._settings)
+        history_store.load()
+        logger.info(f"History loaded: {history_store.count} entries")
+
         splash.show_progress(10, "언어 감지기 초기화 중...")
         language_detector = LanguageDetector()
 
@@ -175,7 +180,7 @@ def main() -> int:
         # Create main window
         splash.show_progress(98, "메인 윈도우 생성 중...")
         logger.info("Creating MainWindow...")
-        window = MainWindow(translation_service, preferences, theme_manager)
+        window = MainWindow(translation_service, preferences, history_store, theme_manager)
         logger.info("MainWindow created")
 
         # Show main window and close splash

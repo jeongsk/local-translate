@@ -1,13 +1,14 @@
 """Main application window."""
 
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QProgressBar,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -15,8 +16,10 @@ from PySide6.QtWidgets import (
 
 from core.config import config
 from core.error_handler import ErrorType, TranslationError
+from core.history_store import HistoryEntry, HistoryStore
 from core.preferences import UserPreferences
 from core.translator import TranslationService
+from ui.history_panel import HistoryPanel
 from ui.language_selector import LanguageSelector
 from utils.logger import get_logger
 
@@ -30,6 +33,7 @@ class MainWindow(QMainWindow):
         self,
         translation_service: TranslationService,
         preferences: UserPreferences,
+        history_store: HistoryStore,
         theme_manager=None,
     ):
         """
@@ -38,11 +42,13 @@ class MainWindow(QMainWindow):
         Args:
             translation_service: Translation service instance
             preferences: User preferences instance
+            history_store: History store instance
             theme_manager: Theme manager instance (optional)
         """
         super().__init__()
         self.translation_service = translation_service
         self.preferences = preferences
+        self.history_store = history_store
         self.theme_manager = theme_manager
         self.current_task_id = None
         self.status_timer = QTimer(self)
@@ -50,6 +56,7 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(lambda: self.status_label.clear())
 
         self._setup_ui()
+        self._setup_history_panel()
         self._connect_signals()
         self._setup_shortcuts()
         self._restore_state()
@@ -65,10 +72,20 @@ class MainWindow(QMainWindow):
         # Setup menu bar
         self._setup_menu_bar()
 
-        # Central widget
+        # Central widget with splitter for history panel
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+        central_layout = QHBoxLayout(central_widget)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+
+        # Main splitter
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        central_layout.addWidget(self._splitter)
+
+        # Main content widget
+        main_content = QWidget()
+        main_layout = QVBoxLayout(main_content)
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(20, 20, 20, 20)
 
@@ -187,6 +204,33 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(button_layout)
 
+        # Add main content to splitter
+        self._splitter.addWidget(main_content)
+
+    def _setup_history_panel(self) -> None:
+        """Setup history panel as side panel."""
+        self._history_panel = HistoryPanel(self.history_store)
+        self._splitter.addWidget(self._history_panel)
+
+        # Set initial splitter sizes (main content: 70%, history: 30%)
+        self._splitter.setSizes([700, 300])
+
+        # Connect history panel signals
+        self._history_panel.entrySelected.connect(self._on_history_entry_selected)
+        self._history_panel.copyRequested.connect(self._on_history_copy_requested)
+        self._history_panel.collapsedChanged.connect(self._on_history_panel_collapsed_changed)
+
+        # Initially hide if preference says so
+        history_visible = self.preferences.get("history_panel_visible", True)
+        self._history_panel.setVisible(history_visible)
+
+        # Restore collapsed state
+        history_collapsed = self.preferences.get("history_panel_collapsed", False)
+        if history_collapsed:
+            self._history_panel.set_collapsed(True)
+
+        logger.debug("History panel initialized")
+
     def _connect_signals(self) -> None:
         """Connect signals and slots."""
         # Text input changes (for button state management)
@@ -234,6 +278,16 @@ class MainWindow(QMainWindow):
         # View menu
         view_menu = menubar.addMenu("&View")
 
+        # History panel toggle action
+        self._history_action = QAction("&History Panel", self)
+        self._history_action.setCheckable(True)
+        self._history_action.setChecked(True)
+        self._history_action.setShortcut(QKeySequence("Ctrl+H"))
+        self._history_action.triggered.connect(self._on_toggle_history_panel)
+        view_menu.addAction(self._history_action)
+
+        view_menu.addSeparator()
+
         # Dark mode toggle action
         if self.theme_manager:
             self.dark_mode_action = view_menu.addAction("&Dark Mode")
@@ -274,6 +328,12 @@ class MainWindow(QMainWindow):
             self.theme_manager.apply_theme()
             self.dark_mode_action.setChecked(dark_mode)
             logger.info(f"Dark mode preference restored: {dark_mode}")
+
+        # Restore history panel visibility
+        history_visible = self.preferences.get("history_panel_visible", True)
+        self._history_panel.setVisible(history_visible)
+        self._history_action.setChecked(history_visible)
+        logger.info(f"History panel visibility restored: {history_visible}")
 
     @Slot()
     def _on_text_changed(self) -> None:
@@ -442,6 +502,18 @@ class MainWindow(QMainWindow):
         self.translate_button.setEnabled(True)
         logger.info(f"Translation complete: {task_id}")
 
+        # Save to history
+        source_text = self.source_text.toPlainText().strip()
+        target_lang = self.target_lang_selector.get_selected_language()
+        entry = HistoryEntry.create(
+            source_text=source_text,
+            translated_text=translated_text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+        self.history_store.add(entry)
+        logger.debug(f"Translation saved to history: {entry.id}")
+
     @Slot(str, int, int, int)
     def _on_translation_retrying(
         self, task_id: str, attempt: int, max_attempts: int, delay_ms: int
@@ -559,11 +631,71 @@ class MainWindow(QMainWindow):
 
             logger.info(f"Dark mode {'enabled' if checked else 'disabled'}")
 
+    @Slot(bool)
+    def _on_toggle_history_panel(self, checked: bool) -> None:
+        """
+        Handle history panel toggle.
+
+        Args:
+            checked: True if history panel should be visible
+        """
+        self._history_panel.setVisible(checked)
+        self.preferences.set("history_panel_visible", checked)
+        logger.info(f"History panel {'shown' if checked else 'hidden'}")
+
+    @Slot(object)
+    def _on_history_entry_selected(self, entry: HistoryEntry) -> None:
+        """
+        Handle history entry selection - loads entry into main view.
+
+        Args:
+            entry: The selected history entry
+        """
+        self.source_text.setPlainText(entry.source_text)
+        self.result_text.setPlainText(entry.translated_text)
+
+        # Set language selectors
+        self.source_lang_selector.set_language(entry.source_lang)
+        self.target_lang_selector.set_language(entry.target_lang)
+
+        self.copy_button.setEnabled(True)
+        self.status_label.setText("✓ 기록에서 불러옴")
+        self.status_timer.start(2000)
+
+        logger.info(f"Loaded history entry: {entry.id}")
+
+    @Slot(str)
+    def _on_history_copy_requested(self, text: str) -> None:
+        """
+        Handle copy request from history panel.
+
+        Args:
+            text: The text to copy
+        """
+        self.status_label.setText("✓ 클립보드에 복사되었습니다")
+        self.status_timer.start(2000)
+
+    @Slot(bool)
+    def _on_history_panel_collapsed_changed(self, collapsed: bool) -> None:
+        """
+        Handle history panel collapsed state change.
+
+        Args:
+            collapsed: True if panel is collapsed
+        """
+        self.preferences.set("history_panel_collapsed", collapsed)
+        logger.debug(f"History panel {'collapsed' if collapsed else 'expanded'}")
+
     def closeEvent(self, event) -> None:
         """Handle window close event."""
         # Save window geometry
         self.preferences.window_geometry = self.saveGeometry()
         self.preferences.window_state = self.saveState()
+
+        # Save history panel state
+        self.preferences.set("history_panel_visible", self._history_panel.isVisible())
+        self.preferences.set("history_panel_collapsed", self._history_panel.is_collapsed)
+
         self.preferences.sync()
 
         logger.info("Window state saved")
