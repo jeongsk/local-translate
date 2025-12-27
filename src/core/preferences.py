@@ -1,8 +1,9 @@
 """User preferences persistence using QSettings."""
 
-from PySide6.QtCore import QSettings, QByteArray
-from typing import Optional
 from enum import Enum
+from typing import Any
+
+from PySide6.QtCore import QByteArray, QSettings
 
 from core.config import LanguageCode
 
@@ -66,7 +67,7 @@ class UserPreferences:
     # Window geometry
 
     @property
-    def window_geometry(self) -> Optional[QByteArray]:
+    def window_geometry(self) -> QByteArray | None:
         """Get window geometry."""
         value = self._settings.value("window/geometry")
         if value is not None:
@@ -79,7 +80,7 @@ class UserPreferences:
         self._settings.setValue("window/geometry", value)
 
     @property
-    def window_state(self) -> Optional[QByteArray]:
+    def window_state(self) -> QByteArray | None:
         """Get window state."""
         value = self._settings.value("window/state")
         if value is not None:
@@ -116,6 +117,31 @@ class UserPreferences:
     def dark_mode(self, value: bool) -> None:
         """Set dark mode preference."""
         self._settings.setValue("appearance/dark_mode", value)
+
+    # Generic getter/setter for dynamic preferences
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get a preference value by key.
+
+        Args:
+            key: The preference key
+            default: Default value if key doesn't exist
+
+        Returns:
+            The preference value or default
+        """
+        return self._settings.value(f"preferences/{key}", default)
+
+    def set(self, key: str, value: Any) -> None:
+        """
+        Set a preference value by key.
+
+        Args:
+            key: The preference key
+            value: The value to set
+        """
+        self._settings.setValue(f"preferences/{key}", value)
 
     # Utility methods
 
