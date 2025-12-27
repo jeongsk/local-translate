@@ -343,3 +343,12 @@ Jobs:
 5. **Thread Safety**: Use Qt signals for cross-thread communication.
 6. **Type Hints**: All new code must have type annotations.
 7. **Test Coverage**: Maintain 80%+ coverage. Add tests for new features.
+
+## Active Technologies
+- Python 3.11+ (프로젝트는 3.12 사용) + PySide6 (Qt6 GUI), QSettings (영구 저장) (002-translation-history)
+- QSettings (로컬 파일 시스템, `~/.config/LocalTranslate/` 또는 macOS plist) (002-translation-history)
+- Python 3.11+ (프로젝트는 3.12 사용) + PySide6 6.5.0+, requests (HTTP 클라이언트) (003-about-update-menu)
+- N/A (앱 메타데이터는 config.py에서 관리) (003-about-update-menu)
+
+## Recent Changes
+- 002-translation-history: Added Python 3.11+ (프로젝트는 3.12 사용) + PySide6 (Qt6 GUI), QSettings (영구 저장)
