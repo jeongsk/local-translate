@@ -1,24 +1,24 @@
 """Main application window."""
 
+from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
     QHBoxLayout,
-    QTextEdit,
-    QProgressBar,
     QLabel,
+    QMainWindow,
+    QProgressBar,
     QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import QShortcut, QKeySequence
 
-from utils.logger import get_logger
-from core.translator import TranslationService
-from core.preferences import UserPreferences
 from core.config import config
 from core.error_handler import ErrorType, TranslationError
+from core.preferences import UserPreferences
+from core.translator import TranslationService
 from ui.language_selector import LanguageSelector
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
         self,
         translation_service: TranslationService,
         preferences: UserPreferences,
-        theme_manager=None
+        theme_manager=None,
     ):
         """
         Initialize main window.
@@ -79,10 +79,7 @@ class MainWindow(QMainWindow):
         source_lang_label = QLabel("소스 언어:")
         lang_layout.addWidget(source_lang_label)
 
-        self.source_lang_selector = LanguageSelector(
-            include_auto=True,
-            auto_label="자동 감지"
-        )
+        self.source_lang_selector = LanguageSelector(include_auto=True, auto_label="자동 감지")
         lang_layout.addWidget(self.source_lang_selector)
 
         lang_layout.addStretch()
@@ -99,9 +96,7 @@ class MainWindow(QMainWindow):
         target_lang_label = QLabel("타겟 언어:")
         lang_layout.addWidget(target_lang_label)
 
-        self.target_lang_selector = LanguageSelector(
-            include_auto=False
-        )
+        self.target_lang_selector = LanguageSelector(include_auto=False)
         lang_layout.addWidget(self.target_lang_selector)
 
         main_layout.addLayout(lang_layout)
@@ -116,6 +111,14 @@ class MainWindow(QMainWindow):
         self.source_text.setAcceptRichText(False)
         main_layout.addWidget(self.source_text)
 
+        # Character counter
+        char_counter_layout = QHBoxLayout()
+        char_counter_layout.addStretch()
+        self.char_counter_label = QLabel(f"0 / {config.performance.max_text_length:,}")
+        self.char_counter_label.setStyleSheet("color: #888888; font-size: 12px;")
+        char_counter_layout.addWidget(self.char_counter_label)
+        main_layout.addLayout(char_counter_layout)
+
         # Translate button
         translate_button_layout = QHBoxLayout()
         translate_button_layout.addStretch()
@@ -124,7 +127,8 @@ class MainWindow(QMainWindow):
         self.translate_button.setToolTip("Cmd+Enter 또는 Ctrl+Enter로 번역 실행")
         self.translate_button.setEnabled(False)
         self.translate_button.setMinimumWidth(140)
-        self.translate_button.setStyleSheet("""
+        self.translate_button.setStyleSheet(
+            """
             QPushButton {
                 background-color: #007AFF;
                 color: white;
@@ -143,7 +147,8 @@ class MainWindow(QMainWindow):
                 background-color: #CCCCCC;
                 color: #888888;
             }
-        """)
+        """
+        )
         translate_button_layout.addWidget(self.translate_button)
 
         main_layout.addLayout(translate_button_layout)
@@ -263,7 +268,7 @@ class MainWindow(QMainWindow):
         self._update_swap_button_state()
 
         # Restore dark mode preference
-        if self.theme_manager and hasattr(self, 'dark_mode_action'):
+        if self.theme_manager and hasattr(self, "dark_mode_action"):
             dark_mode = self.preferences.dark_mode
             self.theme_manager.is_dark_mode = dark_mode
             self.theme_manager.apply_theme()
@@ -274,6 +279,11 @@ class MainWindow(QMainWindow):
     def _on_text_changed(self) -> None:
         """Handle source text changes - manages translate button state."""
         text = self.source_text.toPlainText().strip()
+        max_length = config.performance.max_text_length
+        current_length = len(text)
+
+        # Update character counter
+        self._update_char_counter(current_length, max_length)
 
         if not text:
             self.result_text.clear()
@@ -283,16 +293,40 @@ class MainWindow(QMainWindow):
             return
 
         # Validate text length
-        if len(text) > config.performance.max_text_length:
-            self.status_label.setText(
-                f"⚠️ 텍스트가 너무 깁니다 ({len(text)} / {config.performance.max_text_length} 자)"
-            )
+        if current_length > max_length:
+            self.status_label.setText("⚠️ 텍스트가 너무 깁니다")
             self.translate_button.setEnabled(False)
             return
 
         # Enable translate button for valid text
         self.translate_button.setEnabled(True)
         self.status_label.clear()
+
+    def _update_char_counter(self, current: int, maximum: int) -> None:
+        """
+        Update character counter label with appropriate color.
+
+        Args:
+            current: Current character count
+            maximum: Maximum allowed characters
+        """
+        self.char_counter_label.setText(f"{current:,} / {maximum:,}")
+
+        # Calculate usage percentage
+        usage_ratio = current / maximum if maximum > 0 else 0
+
+        # Set color based on usage
+        if current > maximum:
+            # Over limit - red
+            color = "#FF3B30"
+        elif usage_ratio >= 0.8:
+            # Warning - orange (80%+)
+            color = "#FF9500"
+        else:
+            # Normal - gray
+            color = "#888888"
+
+        self.char_counter_label.setStyleSheet(f"color: {color}; font-size: 12px;")
 
     @Slot()
     def _on_translate_clicked(self) -> None:
@@ -330,7 +364,9 @@ class MainWindow(QMainWindow):
         # Update swap button state
         self._update_swap_button_state()
 
-        logger.info(f"Language changed: {self.preferences.source_language} -> {self.preferences.target_language}")
+        logger.info(
+            f"Language changed: {self.preferences.source_language} -> {self.preferences.target_language}"
+        )
 
     def _update_swap_button_state(self) -> None:
         """Update swap button enabled state based on source language."""
