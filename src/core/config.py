@@ -209,6 +209,12 @@ class AppConfig:
     organization: str = "LocalTranslate"
     version: str = "0.1.2"
 
+    # About dialog information
+    copyright_year: str = "2024-2025"
+    license_type: str = "MIT"
+    github_url: str = "https://github.com/jeongsk/local-translate"
+    github_api_url: str = "https://api.github.com/repos/jeongsk/local-translate"
+
     # UI Configuration
     window_min_width: int = 800
     window_min_height: int = 600
