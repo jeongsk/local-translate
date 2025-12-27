@@ -218,10 +218,16 @@ class MainWindow(QMainWindow):
         # Connect history panel signals
         self._history_panel.entrySelected.connect(self._on_history_entry_selected)
         self._history_panel.copyRequested.connect(self._on_history_copy_requested)
+        self._history_panel.collapsedChanged.connect(self._on_history_panel_collapsed_changed)
 
         # Initially hide if preference says so
         history_visible = self.preferences.get("history_panel_visible", True)
         self._history_panel.setVisible(history_visible)
+
+        # Restore collapsed state
+        history_collapsed = self.preferences.get("history_panel_collapsed", False)
+        if history_collapsed:
+            self._history_panel.set_collapsed(True)
 
         logger.debug("History panel initialized")
 
@@ -669,14 +675,26 @@ class MainWindow(QMainWindow):
         self.status_label.setText("✓ 클립보드에 복사되었습니다")
         self.status_timer.start(2000)
 
+    @Slot(bool)
+    def _on_history_panel_collapsed_changed(self, collapsed: bool) -> None:
+        """
+        Handle history panel collapsed state change.
+
+        Args:
+            collapsed: True if panel is collapsed
+        """
+        self.preferences.set("history_panel_collapsed", collapsed)
+        logger.debug(f"History panel {'collapsed' if collapsed else 'expanded'}")
+
     def closeEvent(self, event) -> None:
         """Handle window close event."""
         # Save window geometry
         self.preferences.window_geometry = self.saveGeometry()
         self.preferences.window_state = self.saveState()
 
-        # Save history panel visibility
+        # Save history panel state
         self.preferences.set("history_panel_visible", self._history_panel.isVisible())
+        self.preferences.set("history_panel_collapsed", self._history_panel.is_collapsed)
 
         self.preferences.sync()
 

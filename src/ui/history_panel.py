@@ -29,10 +29,12 @@ class HistoryPanel(QWidget):
     Signals:
         entrySelected: Emitted when a history entry is selected (HistoryEntry)
         copyRequested: Emitted when copy is requested (translated_text)
+        collapsedChanged: Emitted when collapsed state changes (is_collapsed)
     """
 
     entrySelected = Signal(object)  # HistoryEntry
     copyRequested = Signal(str)  # translated_text
+    collapsedChanged = Signal(bool)  # is_collapsed
 
     def __init__(
         self,
@@ -48,6 +50,7 @@ class HistoryPanel(QWidget):
         super().__init__(parent)
         self._store = history_store
         self._item_widgets: dict[str, HistoryItemWidget] = {}
+        self._is_collapsed = False
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(config.history.search_debounce_ms)
@@ -59,16 +62,76 @@ class HistoryPanel(QWidget):
 
     def _setup_ui(self) -> None:
         """Set up the panel UI."""
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(400)
+        self._expanded_width = 320
+        self._collapsed_width = 36
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(8)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Collapsed bar (shown when collapsed)
+        self._collapsed_bar = QWidget()
+        self._collapsed_bar.setFixedWidth(self._collapsed_width)
+        collapsed_layout = QVBoxLayout(self._collapsed_bar)
+        collapsed_layout.setContentsMargins(4, 8, 4, 8)
+        collapsed_layout.setSpacing(4)
+
+        self._expand_btn = QPushButton("◀")
+        self._expand_btn.setObjectName("expandButton")
+        self._expand_btn.setFixedSize(28, 28)
+        self._expand_btn.setToolTip("히스토리 패널 펼치기")
+        self._expand_btn.clicked.connect(self._on_expand_clicked)
+        self._expand_btn.setStyleSheet("""
+            QPushButton#expandButton {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            QPushButton#expandButton:hover {
+                background-color: palette(mid);
+            }
+        """)
+        collapsed_layout.addWidget(self._expand_btn)
+
+        # Vertical label for collapsed state
+        self._collapsed_label = QLabel("기\n록")
+        self._collapsed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._collapsed_label.setStyleSheet("font-size: 12px; color: palette(text);")
+        collapsed_layout.addWidget(self._collapsed_label)
+        collapsed_layout.addStretch()
+
+        self._collapsed_bar.hide()
+        main_layout.addWidget(self._collapsed_bar)
+
+        # Expanded content (main panel)
+        self._expanded_content = QWidget()
+        self._expanded_content.setMinimumWidth(280)
+        self._expanded_content.setMaximumWidth(400)
+        content_layout = QVBoxLayout(self._expanded_content)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setSpacing(8)
 
         # Header
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
+
+        # Collapse button
+        self._collapse_btn = QPushButton("▶")
+        self._collapse_btn.setObjectName("collapseButton")
+        self._collapse_btn.setFixedSize(24, 24)
+        self._collapse_btn.setToolTip("히스토리 패널 접기")
+        self._collapse_btn.clicked.connect(self._on_collapse_clicked)
+        self._collapse_btn.setStyleSheet("""
+            QPushButton#collapseButton {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                font-size: 10px;
+            }
+            QPushButton#collapseButton:hover {
+                background-color: palette(mid);
+            }
+        """)
+        header_layout.addWidget(self._collapse_btn)
 
         title_label = QLabel("번역 기록")
         title_label.setObjectName("historyTitle")
@@ -82,13 +145,13 @@ class HistoryPanel(QWidget):
         self._clear_all_btn.setFixedWidth(70)
         header_layout.addWidget(self._clear_all_btn)
 
-        main_layout.addLayout(header_layout)
+        content_layout.addLayout(header_layout)
 
         # Search input
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("검색...")
         self._search_input.setClearButtonEnabled(True)
-        main_layout.addWidget(self._search_input)
+        content_layout.addWidget(self._search_input)
 
         # Scroll area for history items
         self._scroll_area = QScrollArea()
@@ -106,20 +169,22 @@ class HistoryPanel(QWidget):
         self._items_layout.addStretch()
 
         self._scroll_area.setWidget(self._items_container)
-        main_layout.addWidget(self._scroll_area, 1)
+        content_layout.addWidget(self._scroll_area, 1)
 
         # Empty state label
         self._empty_label = QLabel("번역 기록이 없습니다")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_label.setStyleSheet("color: palette(placeholderText);")
-        main_layout.addWidget(self._empty_label)
+        content_layout.addWidget(self._empty_label)
 
         # No results label (for search)
         self._no_results_label = QLabel("검색 결과가 없습니다")
         self._no_results_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._no_results_label.setStyleSheet("color: palette(placeholderText);")
         self._no_results_label.hide()
-        main_layout.addWidget(self._no_results_label)
+        content_layout.addWidget(self._no_results_label)
+
+        main_layout.addWidget(self._expanded_content)
 
     def _connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -301,3 +366,50 @@ class HistoryPanel(QWidget):
         self._no_results_label.setVisible(visible_count == 0 and len(self._item_widgets) > 0)
         self._scroll_area.setVisible(visible_count > 0)
         self._empty_label.hide()
+
+    # Collapse/Expand functionality
+
+    @property
+    def is_collapsed(self) -> bool:
+        """Check if the panel is collapsed."""
+        return self._is_collapsed
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Set the collapsed state of the panel.
+
+        Args:
+            collapsed: True to collapse, False to expand
+        """
+        if self._is_collapsed == collapsed:
+            return
+
+        self._is_collapsed = collapsed
+        self._collapsed_bar.setVisible(collapsed)
+        self._expanded_content.setVisible(not collapsed)
+
+        # Update size constraints
+        if collapsed:
+            self.setFixedWidth(self._collapsed_width)
+        else:
+            self.setMinimumWidth(280)
+            self.setMaximumWidth(400)
+            self.setFixedWidth(self._expanded_width)
+            # Remove fixed width constraint after setting
+            self.setMinimumWidth(280)
+            self.setMaximumWidth(400)
+
+        self.collapsedChanged.emit(collapsed)
+
+    @Slot()
+    def _on_collapse_clicked(self) -> None:
+        """Handle collapse button click."""
+        self.set_collapsed(True)
+
+    @Slot()
+    def _on_expand_clicked(self) -> None:
+        """Handle expand button click."""
+        self.set_collapsed(False)
+
+    def toggle_collapsed(self) -> None:
+        """Toggle the collapsed state."""
+        self.set_collapsed(not self._is_collapsed)
