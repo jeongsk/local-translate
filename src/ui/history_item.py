@@ -119,31 +119,9 @@ class HistoryItemWidget(QFrame):
 
     def _apply_styles(self) -> None:
         """Apply styles to the widget."""
-        self.setStyleSheet(
-            """
-            HistoryItemWidget {
-                background-color: palette(base);
-                border: 1px solid palette(mid);
-                border-radius: 6px;
-            }
-            HistoryItemWidget:hover {
-                background-color: palette(alternateBase);
-                border-color: palette(highlight);
-            }
-            QLabel#langLabel, QLabel#timeLabel {
-                color: palette(placeholderText);
-                font-size: 11px;
-            }
-            QPushButton#copyButton, QPushButton#deleteButton {
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton#deleteButton {
-                color: #dc3545;
-            }
-            """
-        )
+        # Note: Styles are applied via ThemeManager in styles.py
+        # Only set minimal frame-specific styles here
+        pass
 
     def mousePressEvent(self, event: any) -> None:
         """Handle mouse press to emit clicked signal."""
